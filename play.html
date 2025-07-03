@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Progressive Texas Hold'em Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            touch-action: manipulation;
+        }
+        .card {
+            width: 80px;
+            height: 112px;
+            border: 1px solid #CBD5E0;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: 700;
+            transition: all 0.5s ease;
+            transform-style: preserve-3d;
+            position: relative;
+        }
+        .card-face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 8px;
+        }
+        .card-front {
+            background-color: #f8fafc;
+        }
+        .card-back {
+            background: linear-gradient(135deg, #4A5568, #2D3748);
+            transform: rotateY(180deg);
+        }
+        .card.is-flipped {
+            transform: rotateY(180deg);
+        }
+        .card-corner {
+            position: absolute;
+            line-height: 1;
+            text-align: center;
+        }
+        .card-corner.top {
+            top: 6px;
+            left: 6px;
+        }
+        .card-corner.bottom {
+            bottom: 6px;
+            right: 6px;
+            transform: rotate(180deg);
+        }
+        .card-rank {
+            font-size: 20px;
+        }
+        .card-suit {
+            font-size: 14px;
+            display: block;
+        }
+        .card.red { color: #E53E3E; }
+        .card.black { color: #2D3748; }
+        .card-placeholder {
+            background-color: rgba(255, 255, 255, 0.05);
+            border: 2px dashed rgba(255, 255, 255, 0.2);
+        }
+        .bet-chip {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+        }
+        .chip-ante { background-color: #4A5568; }
+        .chip-play { background-color: #3182CE; }
+        .chip-turn { background-color: #38A169; }
+        .chip-river { background-color: #D69E2E; }
+        
+        @keyframes deal-card {
+            from { transform: translateY(-100px) scale(0.8); opacity: 0; }
+            to { transform: translateY(0) scale(1); opacity: 1; }
+        }
+        .deal-in {
+            animation: deal-card 0.3s ease-out;
+        }
+        #language-selector {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 0.5rem center;
+            background-size: 1.5em 1.5em;
+            padding-right: 2.5rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-800 text-white min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-4xl mx-auto bg-gray-900 rounded-2xl shadow-2xl p-4 sm:p-6 md:p-8 space-y-6 relative">
+        
+        <!-- Language Selector -->
+        <div class="absolute top-4 right-4">
+            <select id="language-selector" class="bg-gray-700 text-white border border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-yellow-500">
+                <option value="zh">简体中文</option>
+                <option value="en" selected>English</option>
+                <option value="es">Español</option>
+                <option value="ja">日本語</option>
+                <option value="ko">한국어</option>
+                <option value="ru">Русский</option>
+                <option value="pt">Português</option>
+                <option value="de">Deutsch</option>
+                <option value="fr">Français</option>
+                <option value="it">Italiano</option>
+                <option value="ar">العربية</option>
+                <option value="hi">हिन्दी</option>
+            </select>
+        </div>
+
+        <div class="text-center pt-8">
+            <h1 id="title" class="text-2xl sm:text-3xl font-bold text-yellow-400"></h1>
+            <p id="subtitle" class="text-gray-400"></p>
+            <div class="mt-2 text-lg">
+                <span id="balance-label"></span>
+                <span id="balance" class="font-bold text-green-400">1000</span>
+            </div>
+        </div>
+
+        <div class="bg-green-800/50 rounded-xl p-4 space-y-6 border-2 border-green-700/50">
+            <div>
+                <h2 id="dealer-hand-label" class="text-lg font-semibold text-center mb-2 text-gray-300 opacity-80"></h2>
+                <div id="dealer-hand" class="flex justify-center items-center space-x-2 h-[112px]"></div>
+            </div>
+            <div>
+                <h2 id="board-label" class="text-lg font-semibold text-center mb-2 text-gray-300"></h2>
+                <div id="community-cards" class="flex justify-center items-center space-x-2 h-[112px]"></div>
+            </div>
+            <div>
+                <h2 id="player-hand-label" class="text-lg font-semibold text-center mb-2 text-gray-300"></h2>
+                 <div id="player-hand" class="flex justify-center items-center space-x-2 h-[112px]"></div>
+            </div>
+        </div>
+
+        <div class="space-y-4">
+            <div class="flex justify-center items-center space-x-2 min-h-[40px]" id="bet-display"></div>
+            <div class="min-h-[64px] flex flex-col justify-center items-center py-2">
+                <div id="message-box" class="text-center text-xl font-bold text-yellow-300 transition-opacity duration-300"></div>
+                <div id="result-box" class="text-center text-2xl font-bold text-white transition-opacity duration-300 mt-1"></div>
+            </div>
+        </div>
+
+        <div id="controls" class="grid grid-cols-2 gap-4 pt-4 border-t border-gray-700 min-h-[60px] content-center"></div>
+
+    </div>
+
+    <script>
+        // --- 1. 游戏常量和状态 ---
+        const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+        const SUITS = { 's': '♠', 'h': '♥', 'd': '♦', 'c': '♣' };
+        const SUIT_COLORS = { 's': 'black', 'h': 'red', 'd': 'red', 'c': 'black' };
+        const HandRank = {
+            HIGH_CARD: 0, ONE_PAIR: 1, TWO_PAIR: 2, THREE_OF_A_KIND: 3, 
+            STRAIGHT: 4, FLUSH: 5, FULL_HOUSE: 6, FOUR_OF_A_KIND: 7, STRAIGHT_FLUSH: 8
+        };
+        
+        let currentLanguage = 'en';
+        const translations = {
+            zh: {
+                title: "Progressive Texas Hold'em 模拟器",
+                subtitle: "玩家 vs 庄家",
+                balance_label: "余额:",
+                dealer_hand_label: "庄家的手牌",
+                board_label: "公共牌面",
+                player_hand_label: "你的手牌",
+                new_hand_btn: "开始新一手",
+                ante_bet: "底注",
+                play_bet: "玩牌",
+                turn_bet: "转牌注",
+                river_bet: "河牌注",
+                decision_preflop: "你的决策：玩牌还是弃牌？",
+                decision_flop: "翻牌圈：下注还是过牌？",
+                decision_turn: "转牌圈：下注还是过牌？",
+                play_btn: "玩牌 (x2)",
+                fold_btn: "弃牌",
+                bet_btn: "下注 (x1)",
+                check_btn: "过牌",
+                showdown_msg: "比牌！",
+                folded_msg: "你已弃牌。",
+                you_lost_msg: "你输掉了",
+                you_won_msg: "你赢了! 获得",
+                push_msg: "平局 (Push)!",
+                your_hand_is: "你的牌型:",
+                dealer_hand_is: "庄家:",
+                both_hands_are: "双方牌型:",
+                start_msg: "点击“开始新一手”来游戏",
+                no_balance_msg: "余额不足！",
+                hand_rank_names: ["高牌", "一对", "两对", "三条", "顺子", "同花", "葫芦", "四条", "同花顺"]
+            },
+            en: {
+                title: "Progressive Texas Hold'em Simulator",
+                subtitle: "Player vs. Dealer",
+                balance_label: "Balance:",
+                dealer_hand_label: "Dealer's Hand",
+                board_label: "Community Cards",
+                player_hand_label: "Your Hand",
+                new_hand_btn: "New Hand",
+                ante_bet: "Ante",
+                play_bet: "Play",
+                turn_bet: "Turn Bet",
+                river_bet: "River Bet",
+                decision_preflop: "Your move: Play or Fold?",
+                decision_flop: "Flop: Bet or Check?",
+                decision_turn: "Turn: Bet or Check?",
+                play_btn: "Play (x2)",
+                fold_btn: "Fold",
+                bet_btn: "Bet (x1)",
+                check_btn: "Check",
+                showdown_msg: "Showdown!",
+                folded_msg: "You folded.",
+                you_lost_msg: "You lost",
+                you_won_msg: "You won! Received",
+                push_msg: "Push!",
+                your_hand_is: "Your hand:",
+                dealer_hand_is: "Dealer:",
+                both_hands_are: "Both have:",
+                start_msg: "Click 'New Hand' to play",
+                no_balance_msg: "Insufficient balance!",
+                hand_rank_names: ["High Card", "One Pair", "Two Pair", "Three of a Kind", "Straight", "Flush", "Full House", "Four of a Kind", "Straight Flush"]
+            },
+            es: {
+                title: "Simulador de Progressive Texas Hold'em",
+                subtitle: "Jugador vs. Crupier",
+                balance_label: "Saldo:",
+                dealer_hand_label: "Mano del Crupier",
+                board_label: "Cartas Comunitarias",
+                player_hand_label: "Tu Mano",
+                new_hand_btn: "Nueva Mano",
+                ante_bet: "Ante",
+                play_bet: "Jugar",
+                turn_bet: "Apuesta Turn",
+                river_bet: "Apuesta River",
+                decision_preflop: "¿Tu jugada: Jugar o Retirarse?",
+                decision_flop: "Flop: ¿Apostar o Pasar?",
+                decision_turn: "Turn: ¿Apostar o Pasar?",
+                play_btn: "Jugar (x2)",
+                fold_btn: "Retirarse",
+                bet_btn: "Apostar (x1)",
+                check_btn: "Pasar",
+                showdown_msg: "¡Showdown!",
+                folded_msg: "Te has retirado.",
+                you_lost_msg: "Perdiste",
+                you_won_msg: "¡Ganaste! Recibiste",
+                push_msg: "¡Empate (Push)!",
+                your_hand_is: "Tu mano:",
+                dealer_hand_is: "Crupier:",
+                both_hands_are: "Ambos tienen:",
+                start_msg: "Haz clic en 'Nueva Mano' para jugar",
+                no_balance_msg: "¡Saldo insuficiente!",
+                hand_rank_names: ["Carta Alta", "Un Par", "Dos Pares", "Trío", "Escalera", "Color", "Full House", "Póker", "Escalera de Color"]
+            },
+            ja: {
+                title: "プログレッシブ・テキサスホールデム・シミュレーター",
+                subtitle: "プレイヤー vs ディーラー",
+                balance_label: "残高:",
+                dealer_hand_label: "ディーラーのハンド",
+                board_label: "コミュニティカード",
+                player_hand_label: "あなたのハンド",
+                new_hand_btn: "新しいハンド",
+                ante_bet: "アンティ",
+                play_bet: "プレイ",
+                turn_bet: "ターンベット",
+                river_bet: "リバーベット",
+                decision_preflop: "アクションを選択: プレイまたはフォールド？",
+                decision_flop: "フロップ: ベットまたはチェック？",
+                decision_turn: "ターン: ベットまたはチェック？",
+                play_btn: "プレイ (x2)",
+                fold_btn: "フォールド",
+                bet_btn: "ベット (x1)",
+                check_btn: "チェック",
+                showdown_msg: "ショーダウン！",
+                folded_msg: "フォールドしました。",
+                you_lost_msg: "負けました",
+                you_won_msg: "勝ちました！獲得",
+                push_msg: "プッシュ！",
+                your_hand_is: "あなたの役:",
+                dealer_hand_is: "ディーラー:",
+                both_hands_are: "両者の役:",
+                start_msg: "「新しいハンド」をクリックしてプレイ",
+                no_balance_msg: "残高が不足しています！",
+                hand_rank_names: ["ハイカード", "ワンペア", "ツーペア", "スリーカード", "ストレート", "フラッシュ", "フルハウス", "フォーカード", "ストレートフラッシュ"]
+            },
+            // Add other languages here...
+            ko: { title: "프로그레시브 텍사스 홀덤 시뮬레이터", subtitle: "플레이어 vs 딜러", balance_label: "잔액:", dealer_hand_label: "딜러의 패", board_label: "커뮤니티 카드", player_hand_label: "당신의 패", new_hand_btn: "새로운 핸드", decision_preflop: "결정: 플레이 또는 폴드?", decision_flop: "플랍: 베팅 또는 체크?", decision_turn: "턴: 베팅 또는 체크?", play_btn: "플레이 (x2)", fold_btn: "폴드", bet_btn: "베팅 (x1)", check_btn: "체크", showdown_msg: "쇼다운!", folded_msg: "폴드했습니다.", you_lost_msg: "졌습니다", you_won_msg: "이겼습니다! 획득", push_msg: "푸시!", your_hand_is: "당신의 족보:", dealer_hand_is: "딜러:", both_hands_are: "양쪽 모두:", start_msg: "'새로운 핸드'를 클릭하여 플레이", no_balance_msg: "잔액 부족!", hand_rank_names: ["하이 카드", "원 페어", "투 페어", "쓰리 오브 어 카인드", "스트레이트", "플러시", "풀 하우스", "포 오브 어 카인드", "스트레이트 플러시"] },
+            ru: { title: "Симулятор Прогрессивного Техасского Холдема", subtitle: "Игрок против Дилера", balance_label: "Баланс:", dealer_hand_label: "Рука дилера", board_label: "Общие карты", player_hand_label: "Ваша рука", new_hand_btn: "Новая раздача", decision_preflop: "Ваш ход: Играть или Сбросить?", decision_flop: "Флоп: Ставить или Чек?", decision_turn: "Терн: Ставить или Чек?", play_btn: "Играть (x2)", fold_btn: "Сбросить", bet_btn: "Ставка (x1)", check_btn: "Чек", showdown_msg: "Вскрытие!", folded_msg: "Вы сбросили карты.", you_lost_msg: "Вы проиграли", you_won_msg: "Вы выиграли! Получено", push_msg: "Возврат!", your_hand_is: "Ваша комбинация:", dealer_hand_is: "Дилер:", both_hands_are: "У обоих:", start_msg: "Нажмите 'Новая раздача' для игры", no_balance_msg: "Недостаточно средств!", hand_rank_names: ["Старшая карта", "Одна пара", "Две пары", "Сет", "Стрит", "Флеш", "Фулл-хаус", "Каре", "Стрит-флеш"] },
+            pt: { title: "Simulador de Progressive Texas Hold'em", subtitle: "Jogador vs. Dealer", balance_label: "Saldo:", dealer_hand_label: "Mão do Dealer", board_label: "Cartas Comunitárias", player_hand_label: "Sua Mão", new_hand_btn: "Nova Mão", decision_preflop: "Sua jogada: Jogar ou Desistir?", decision_flop: "Flop: Apostar ou Passar?", decision_turn: "Turn: Apostar ou Passar?", play_btn: "Jogar (x2)", fold_btn: "Desistir", bet_btn: "Apostar (x1)", check_btn: "Passar", showdown_msg: "Showdown!", folded_msg: "Você desistiu.", you_lost_msg: "Você perdeu", you_won_msg: "Você ganhou! Recebeu", push_msg: "Empate!", your_hand_is: "Sua mão:", dealer_hand_is: "Dealer:", both_hands_are: "Ambos têm:", start_msg: "Clique 'Nova Mão' para jogar", no_balance_msg: "Saldo insuficiente!", hand_rank_names: ["Carta Alta", "Um Par", "Dois Pares", "Trinca", "Sequência", "Flush", "Full House", "Quadra", "Straight Flush"] },
+            de: { title: "Progressive Texas Hold'em Simulator", subtitle: "Spieler gegen Dealer", balance_label: "Guthaben:", dealer_hand_label: "Hand des Dealers", board_label: "Gemeinschaftskarten", player_hand_label: "Ihre Hand", new_hand_btn: "Neue Hand", decision_preflop: "Ihre Entscheidung: Spielen oder Aufgeben?", decision_flop: "Flop: Setzen oder Schieben?", decision_turn: "Turn: Setzen oder Schieben?", play_btn: "Spielen (x2)", fold_btn: "Aufgeben", bet_btn: "Setzen (x1)", check_btn: "Schieben", showdown_msg: "Showdown!", folded_msg: "Sie haben aufgegeben.", you_lost_msg: "Sie haben verloren", you_won_msg: "Sie haben gewonnen! Erhalten", push_msg: "Push!", your_hand_is: "Ihre Hand:", dealer_hand_is: "Dealer:", both_hands_are: "Beide haben:", start_msg: "Klicken Sie auf 'Neue Hand', um zu spielen", no_balance_msg: "Unzureichendes Guthaben!", hand_rank_names: ["Höchste Karte", "Ein Paar", "Zwei Paare", "Drilling", "Straße", "Flush", "Full House", "Vierling", "Straight Flush"] },
+            fr: { title: "Simulateur de Progressive Texas Hold'em", subtitle: "Joueur vs Croupier", balance_label: "Solde:", dealer_hand_label: "Main du Croupier", board_label: "Cartes communes", player_hand_label: "Votre Main", new_hand_btn: "Nouvelle Main", decision_preflop: "Votre décision: Jouer ou Passer?", decision_flop: "Flop: Miser ou Checker?", decision_turn: "Turn: Miser ou Checker?", play_btn: "Jouer (x2)", fold_btn: "Passer", bet_btn: "Miser (x1)", check_btn: "Checker", showdown_msg: "Abattage!", folded_msg: "Vous avez passé.", you_lost_msg: "Vous avez perdu", you_won_msg: "Vous avez gagné! Reçu", push_msg: "Égalité!", your_hand_is: "Votre main:", dealer_hand_is: "Croupier:", both_hands_are: "Les deux ont:", start_msg: "Cliquez sur 'Nouvelle Main' pour jouer", no_balance_msg: "Solde insuffisant!", hand_rank_names: ["Carte Haute", "Paire", "Deux Paires", "Brelan", "Quinte", "Couleur", "Full", "Carré", "Quinte Flush"] },
+            it: { title: "Simulatore di Progressive Texas Hold'em", subtitle: "Giocatore vs. Banco", balance_label: "Saldo:", dealer_hand_label: "Mano del Banco", board_label: "Carte Comuni", player_hand_label: "La Tua Mano", new_hand_btn: "Nuova Mano", decision_preflop: "La tua mossa: Giocare o Lasciare?", decision_flop: "Flop: Puntare o Cip?", decision_turn: "Turn: Puntare o Cip?", play_btn: "Gioca (x2)", fold_btn: "Lascia", bet_btn: "Punta (x1)", check_btn: "Cip", showdown_msg: "Showdown!", folded_msg: "Hai lasciato.", you_lost_msg: "Hai perso", you_won_msg: "Hai vinto! Ricevuto", push_msg: "Push!", your_hand_is: "La tua mano:", dealer_hand_is: "Banco:", both_hands_are: "Entrambi hanno:", start_msg: "Clicca 'Nuova Mano' per giocare", no_balance_msg: "Saldo insufficiente!", hand_rank_names: ["Carta Alta", "Coppia", "Doppia Coppia", "Tris", "Scala", "Colore", "Full", "Poker", "Scala a Colore"] },
+            ar: { title: "محاكي بوكر تكساس هولدم المتقدم", subtitle: "لاعب ضد موزع", balance_label: "الرصيد:", dealer_hand_label: "يد الموزع", board_label: "الأوراق المشتركة", player_hand_label: "يدك", new_hand_btn: "يد جديدة", decision_preflop: "قرارك: لعب أم انسحاب؟", decision_flop: "الفلوب: رهان أم تفويت؟", decision_turn: "التيرن: رهان أم تفويت؟", play_btn: "لعب (x2)", fold_btn: "انسحاب", bet_btn: "رهان (x1)", check_btn: "تفويت", showdown_msg: "كشف الأوراق!", folded_msg: "لقد انسحبت.", you_lost_msg: "لقد خسرت", you_won_msg: "لقد فزت! حصلت على", push_msg: "تعادل!", your_hand_is: "يدك:", dealer_hand_is: "الموزع:", both_hands_are: "كلاهما لديه:", start_msg: "انقر على 'يد جديدة' للعب", no_balance_msg: "رصيد غير كاف!", hand_rank_names: ["بطاقة عالية", "زوج واحد", "زوجان", "ثلاثة من نوع", "سلسلة", "لون", "بيت كامل", "أربعة من نوع", "سلسلة لونية"] },
+            hi: { title: "प्रोग्रेसिव टेक्सास होल्डम सिम्युलेटर", subtitle: "खिलाड़ी बनाम डीलर", balance_label: "शेष राशि:", dealer_hand_label: "डीलर के पत्ते", board_label: "साझा पत्ते", player_hand_label: "आपके पत्ते", new_hand_btn: "नया हाथ", decision_preflop: "आपकी चाल: खेलें या फोल्ड करें?", decision_flop: "फ्लॉप: बेट लगाएं या चेक करें?", decision_turn: "टर्न: बेट लगाएं या चेक करें?", play_btn: "खेलें (x2)", fold_btn: "फोल्ड", bet_btn: "बेट (x1)", check_btn: "चेक", showdown_msg: "शोडाउन!", folded_msg: "आपने फोल्ड कर दिया।", you_lost_msg: "आप हार गए", you_won_msg: "आप जीत गए! प्राप्त हुए", push_msg: "पुश!", your_hand_is: "आपके पत्ते:", dealer_hand_is: "डीलर:", both_hands_are: "दोनों के पास:", start_msg: "खेलने के लिए 'नया हाथ' पर क्लिक करें", no_balance_msg: "अपर्याप्त शेष राशि!", hand_rank_names: ["हाई कार्ड", "एक जोड़ी", "दो जोड़ी", "थ्री ऑफ अ काइंड", "स्ट्रेट", "फ्लश", "फुल हाउस", "फोर ऑफ अ काइंड", "स्ट्रेट फ्लश"] }
+        };
+
+        let gameState = 'idle';
+        let deck = [];
+        let playerHand = [], dealerHand = [], communityCards = [];
+        let bets = {};
+        let balance = 1000;
+        let anteAmount = 10;
+
+        // --- 2. DOM元素获取 ---
+        const balanceEl = document.getElementById('balance');
+        const communityCardsEl = document.getElementById('community-cards');
+        const playerHandEl = document.getElementById('player-hand');
+        const dealerHandEl = document.getElementById('dealer-hand');
+        const controlsEl = document.getElementById('controls');
+        const messageBoxEl = document.getElementById('message-box');
+        const resultBoxEl = document.getElementById('result-box');
+        const betDisplayEl = document.getElementById('bet-display');
+        const languageSelector = document.getElementById('language-selector');
+
+        // --- 3. 核心游戏逻辑 ---
+        
+        function createDeck() {
+            deck = [];
+            for (const suit of Object.keys(SUITS)) {
+                for (let i = 0; i < RANKS.length; i++) {
+                    deck.push({ rank: i + 2, suit: suit });
+                }
+            }
+        }
+
+        function shuffleDeck() {
+            for (let i = deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]];
+            }
+        }
+
+        function evaluateHand(sevenCards) {
+            let bestRankInfo = { rankEnum: HandRank.HIGH_CARD, rankValues: [0] };
+            
+            const combinations = (arr, k) => {
+                const result = [];
+                const comb = (start, chosen) => {
+                    if (chosen.length === k) { result.push([...chosen]); return; }
+                    for (let i = start; i < arr.length; i++) {
+                        chosen.push(arr[i]); comb(i + 1, chosen); chosen.pop();
+                    }
+                }
+                comb(0, []);
+                return result;
+            };
+
+            const all5CardCombos = combinations(sevenCards, 5);
+
+            for (const combo of all5CardCombos) {
+                const ranks = combo.map(c => c.rank).sort((a, b) => b - a);
+                const suits = combo.map(c => c.suit);
+                const isFlush = new Set(suits).size === 1;
+                const isWheel = JSON.stringify(ranks) === JSON.stringify([14, 5, 4, 3, 2]);
+                const strRanks = isWheel ? [5, 4, 3, 2, 1] : ranks;
+                const isStraight = new Set(strRanks).size === 5 && strRanks[0] - strRanks[4] === 4;
+                
+                let currentRankInfo = { rankEnum: HandRank.HIGH_CARD, rankValues: ranks };
+
+                if (isStraight && isFlush) {
+                    currentRankInfo = { rankEnum: HandRank.STRAIGHT_FLUSH, rankValues: strRanks };
+                } else if (isFlush) {
+                    currentRankInfo = { rankEnum: HandRank.FLUSH, rankValues: ranks };
+                } else if (isStraight) {
+                    currentRankInfo = { rankEnum: HandRank.STRAIGHT, rankValues: strRanks };
+                } else {
+                    const counts = ranks.reduce((acc, rank) => { acc[rank] = (acc[rank] || 0) + 1; return acc; }, {});
+                    const sortedCounts = Object.entries(counts).sort((a, b) => b[1] - a[1] || b[0] - a[0]);
+                    const majorCount = sortedCounts[0][1];
+                    const majorRank = parseInt(sortedCounts[0][0]);
+                    if (majorCount === 4) {
+                        const kicker = Math.max(...ranks.filter(r => r !== majorRank));
+                        currentRankInfo = { rankEnum: HandRank.FOUR_OF_A_KIND, rankValues: [majorRank, kicker] };
+                    } else if (majorCount === 3) {
+                        if (sortedCounts.length > 1 && sortedCounts[1][1] >= 2) {
+                            currentRankInfo = { rankEnum: HandRank.FULL_HOUSE, rankValues: [majorRank, parseInt(sortedCounts[1][0])] };
+                        } else {
+                            const kickers = ranks.filter(r => r !== majorRank).slice(0, 2);
+                            currentRankInfo = { rankEnum: HandRank.THREE_OF_A_KIND, rankValues: [majorRank, ...kickers] };
+                        }
+                    } else if (majorCount === 2) {
+                        if (sortedCounts.length > 1 && sortedCounts[1][1] === 2) {
+                             const kicker = Math.max(...ranks.filter(r => r !== majorRank && r !== parseInt(sortedCounts[1][0])));
+                             currentRankInfo = { rankEnum: HandRank.TWO_PAIR, rankValues: [majorRank, parseInt(sortedCounts[1][0]), kicker] };
+                        } else {
+                            const kickers = ranks.filter(r => r !== majorRank).slice(0, 3);
+                            currentRankInfo = { rankEnum: HandRank.ONE_PAIR, rankValues: [majorRank, ...kickers] };
+                        }
+                    }
+                }
+                
+                let isNewBest = false;
+                if (currentRankInfo.rankEnum > bestRankInfo.rankEnum) {
+                    isNewBest = true;
+                } else if (currentRankInfo.rankEnum === bestRankInfo.rankEnum) {
+                    for (let i = 0; i < currentRankInfo.rankValues.length; i++) {
+                        if (currentRankInfo.rankValues[i] > bestRankInfo.rankValues[i]) {
+                            isNewBest = true;
+                            break;
+                        }
+                        if (currentRankInfo.rankValues[i] < bestRankInfo.rankValues[i]) {
+                            break;
+                        }
+                    }
+                }
+                if (isNewBest) {
+                    bestRankInfo = currentRankInfo;
+                }
+            }
+            return bestRankInfo;
+        }
+
+        // --- 4. UI渲染和更新 ---
+        function createCardDOM(card, isFlipped = false) {
+            const cardDiv = document.createElement('div');
+            cardDiv.className = `card ${card ? SUIT_COLORS[card.suit] : ''} shadow-lg`;
+            if (isFlipped) cardDiv.classList.add('is-flipped');
+            
+            const rankDisplay = card ? RANKS[card.rank - 2] : '';
+            const suitDisplay = card ? SUITS[card.suit] : '';
+
+            cardDiv.innerHTML = `
+                <div class="card-face card-front">
+                    <div class="card-corner top">
+                        <span class="card-rank">${rankDisplay}</span>
+                        <span class="card-suit">${suitDisplay}</span>
+                    </div>
+                    <div class="text-4xl">${suitDisplay}</div>
+                    <div class="card-corner bottom">
+                        <span class="card-rank">${rankDisplay}</span>
+                        <span class="card-suit">${suitDisplay}</span>
+                    </div>
+                </div>
+                <div class="card-face card-back"></div>
+            `;
+            return cardDiv;
+        }
+        
+        function createCardPlaceholder() {
+            const cardDiv = document.createElement('div');
+            cardDiv.className = 'card card-placeholder';
+            return cardDiv;
+        }
+
+        function renderPlayerHand() {
+            playerHandEl.innerHTML = '';
+            playerHand.forEach(card => playerHandEl.appendChild(createCardDOM(card)));
+        }
+
+        function renderDealerHand(reveal = false) {
+            dealerHandEl.innerHTML = '';
+            if (dealerHand.length > 0) {
+                 dealerHand.forEach(card => {
+                    dealerHandEl.appendChild(createCardDOM(card, !reveal));
+                });
+            } else {
+                dealerHandEl.appendChild(createCardPlaceholder());
+                dealerHandEl.appendChild(createCardPlaceholder());
+            }
+        }
+
+        function renderInitialBoard() {
+            communityCardsEl.innerHTML = '';
+            for(let i = 0; i < 5; i++) {
+                communityCardsEl.appendChild(createCardPlaceholder());
+            }
+        }
+        
+        function renderCommunityCards(stage) {
+            if (stage === 'flop') {
+                communityCards.forEach((card, index) => {
+                    const cardDOM = createCardDOM(card);
+                    cardDOM.classList.add('deal-in');
+                    communityCardsEl.replaceChild(cardDOM, communityCardsEl.children[index]);
+                });
+            } else if (stage === 'turn') {
+                const cardDOM = createCardDOM(communityCards[3]);
+                cardDOM.classList.add('deal-in');
+                communityCardsEl.replaceChild(cardDOM, communityCardsEl.children[3]);
+            } else if (stage === 'river') {
+                const cardDOM = createCardDOM(communityCards[4]);
+                cardDOM.classList.add('deal-in');
+                communityCardsEl.replaceChild(cardDOM, communityCardsEl.children[4]);
+            }
+        }
+
+        function renderBets() {
+            betDisplayEl.innerHTML = '';
+            if (bets.ante) betDisplayEl.innerHTML += `<div class="bet-chip chip-ante"><span>${bets.ante}</span></div>`;
+            if (bets.play) betDisplayEl.innerHTML += `<div class="bet-chip chip-play"><span>${bets.play}</span></div>`;
+            if (bets.turn) betDisplayEl.innerHTML += `<div class="bet-chip chip-turn"><span>${bets.turn}</span></div>`;
+            if (bets.river) betDisplayEl.innerHTML += `<div class="bet-chip chip-river"><span>${bets.river}</span></div>`;
+        }
+
+        function renderControls() {
+            controlsEl.innerHTML = ''; // Clear previous controls
+            const t = translations[currentLanguage];
+            switch(gameState) {
+                case 'idle':
+                case 'end':
+                    controlsEl.innerHTML = `<button id="new-hand-btn" class="w-full bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold py-3 px-4 rounded-lg transition-transform transform hover:scale-105 col-span-2">${t.new_hand_btn} (Ante ${anteAmount})</button>`;
+                    document.getElementById('new-hand-btn').onclick = handleNewHand;
+                    if (gameState === 'idle') messageBoxEl.textContent = t.start_msg;
+                    break;
+                case 'pre-flop':
+                    messageBoxEl.textContent = t.decision_preflop;
+                    controlsEl.innerHTML = `
+                        <button id="play-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-lg transition-transform transform hover:scale-105">${t.play_btn}</button>
+                        <button id="fold-btn" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-4 rounded-lg transition-transform transform hover:scale-105">${t.fold_btn}</button>
+                    `;
+                    document.getElementById('play-btn').onclick = handlePlay;
+                    document.getElementById('fold-btn').onclick = handleFold;
+                    break;
+                case 'flop':
+                    messageBoxEl.textContent = t.decision_flop;
+                    controlsEl.innerHTML = `
+                        <button id="bet-btn" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg transition-transform transform hover:scale-105">${t.bet_btn}</button>
+                        <button id="check-btn" class="w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-lg transition-transform transform hover:scale-105">${t.check_btn}</button>
+                    `;
+                    document.getElementById('bet-btn').onclick = () => handleBetOrCheck(true);
+                    document.getElementById('check-btn').onclick = () => handleBetOrCheck(false);
+                    break;
+                case 'turn':
+                    messageBoxEl.textContent = t.decision_turn;
+                    controlsEl.innerHTML = `
+                        <button id="bet-btn" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg transition-transform transform hover:scale-105">${t.bet_btn}</button>
+                        <button id="check-btn" class="w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-lg transition-transform transform hover:scale-105">${t.check_btn}</button>
+                    `;
+                    document.getElementById('bet-btn').onclick = () => handleBetOrCheck(true);
+                    document.getElementById('check-btn').onclick = () => handleBetOrCheck(false);
+                    break;
+            }
+        }
+
+        // --- 5. 游戏流程控制 ---
+        function handleNewHand() {
+            const t = translations[currentLanguage];
+            if (balance < anteAmount) {
+                messageBoxEl.textContent = t.no_balance_msg;
+                return;
+            }
+            balance -= anteAmount;
+            bets = { ante: anteAmount };
+            
+            createDeck();
+            shuffleDeck();
+
+            playerHand = [deck.pop(), deck.pop()];
+            dealerHand = [deck.pop(), deck.pop()];
+            communityCards = [];
+            
+            resultBoxEl.textContent = '';
+            gameState = 'pre-flop';
+            
+            balanceEl.textContent = balance;
+            renderBets();
+            renderPlayerHand();
+            renderDealerHand(false);
+            renderInitialBoard();
+            renderControls();
+        }
+
+        function handleFold() {
+            const t = translations[currentLanguage];
+            gameState = 'end';
+            messageBoxEl.textContent = t.folded_msg;
+            resultBoxEl.textContent = `${t.you_lost_msg} ${bets.ante}.`;
+            renderControls();
+        }
+
+        function handlePlay() {
+            balance -= anteAmount * 2;
+            bets.play = anteAmount * 2;
+            gameState = 'flop';
+            communityCards = [deck.pop(), deck.pop(), deck.pop()];
+            
+            balanceEl.textContent = balance;
+            renderBets();
+            renderCommunityCards('flop');
+            renderControls();
+        }
+
+        function handleBetOrCheck(isBet) {
+            if (gameState === 'flop') {
+                if (isBet) {
+                    balance -= anteAmount;
+                    bets.turn = anteAmount;
+                }
+                gameState = 'turn';
+                communityCards.push(deck.pop());
+                renderCommunityCards('turn');
+            } else if (gameState === 'turn') {
+                if (isBet) {
+                    balance -= anteAmount;
+                    bets.river = anteAmount;
+                }
+                gameState = 'showdown';
+                communityCards.push(deck.pop());
+                renderCommunityCards('river');
+                setTimeout(doShowdown, 800);
+            }
+            balanceEl.textContent = balance;
+            renderBets();
+            renderControls();
+        }
+        
+        function doShowdown() {
+            gameState = 'showdown';
+            renderControls(); // Clear buttons
+            const t = translations[currentLanguage];
+            messageBoxEl.textContent = t.showdown_msg;
+            
+            const playerBest = evaluateHand([...playerHand, ...communityCards]);
+            const dealerBest = evaluateHand([...dealerHand, ...communityCards]);
+            
+            const playerRankName = t.hand_rank_names[playerBest.rankEnum];
+            const dealerRankName = t.hand_rank_names[dealerBest.rankEnum];
+
+            let resultMessage = '';
+            let winnings = 0;
+            const totalBet = Object.values(bets).reduce((a, b) => a + b, 0);
+
+            let playerWins = false;
+            if (playerBest.rankEnum > dealerBest.rankEnum) {
+                playerWins = true;
+            } else if (playerBest.rankEnum === dealerBest.rankEnum) {
+                for (let i = 0; i < playerBest.rankValues.length; i++) {
+                    if (playerBest.rankValues[i] > dealerBest.rankValues[i]) {
+                        playerWins = true;
+                        break;
+                    }
+                    if (playerBest.rankValues[i] < dealerBest.rankValues[i]) {
+                        break;
+                    }
+                }
+            }
+
+            if (playerWins) {
+                winnings = totalBet - bets.ante;
+                balance += totalBet + winnings;
+                resultMessage = `${t.you_won_msg} ${winnings} (${t.your_hand_is} ${playerRankName})`;
+                resultBoxEl.style.color = '#48BB78';
+            } else if (JSON.stringify(playerBest) === JSON.stringify(dealerBest)) {
+                 balance += totalBet;
+                resultMessage = `${t.push_msg} (${t.both_hands_are} ${playerRankName})`;
+                resultBoxEl.style.color = '#ECC94B';
+            }
+            else { // Player loses
+                resultMessage = `${t.you_lost_msg} ${totalBet} (${t.your_hand_is} ${playerRankName}, ${t.dealer_hand_is} ${dealerRankName})`;
+                resultBoxEl.style.color = '#F56565';
+            }
+            
+            resultBoxEl.textContent = resultMessage;
+            gameState = 'end';
+            balanceEl.textContent = balance;
+            renderDealerHand(true); // Reveal dealer's hand
+            renderControls();
+        }
+        
+        // --- 6. 多语言支持 ---
+        function applyLanguage(lang) {
+            currentLanguage = lang;
+            const t = translations[lang];
+            document.documentElement.lang = lang;
+            document.getElementById('title').textContent = t.title;
+            document.getElementById('subtitle').textContent = t.subtitle;
+            document.getElementById('balance-label').textContent = t.balance_label;
+            document.getElementById('dealer-hand-label').textContent = t.dealer_hand_label;
+            document.getElementById('board-label').textContent = t.board_label;
+            document.getElementById('player-hand-label').textContent = t.player_hand_label;
+            
+            // Re-render controls and messages to apply new language
+            renderControls();
+            
+            // Update existing messages if a game is not in progress
+            if (gameState === 'idle' || gameState === 'end') {
+                if (resultBoxEl.textContent) {
+                    // This is a bit tricky, we can't perfectly re-translate results
+                    // For now, we just update the static part
+                } else {
+                     messageBoxEl.textContent = t.start_msg;
+                }
+            }
+        }
+
+        languageSelector.addEventListener('change', (e) => {
+            applyLanguage(e.target.value);
+        });
+
+
+        // --- 7. 初始化 ---
+        function init() {
+            renderInitialBoard();
+            renderDealerHand(false);
+            renderPlayerHand();
+            applyLanguage(currentLanguage); // Apply default language
+        }
+
+        init();
+
+    </script>
+</body>
+</html>
